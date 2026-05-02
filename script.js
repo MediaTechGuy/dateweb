@@ -1,15 +1,19 @@
 /* ─────────────────────────────────────────────
-   Blessing & Tolulope — Save The Date v3
-   script.js (fixed)
+   Blessing & Tolulope — Save The Date
+   script.js
 ───────────────────────────────────────────── */
 
+/* ── STATE ── */
 let isOpened  = false;
 let isPlaying = false;
 
-const musicEl   = document.getElementById('music');
-const iconPlay  = document.getElementById('iconPlay');
-const iconPause = document.getElementById('iconPause');
-const musicBars = document.getElementById('musicBars');
+/* ── ELEMENTS ── */
+const body        = document.body;
+const musicEl     = document.getElementById('music');
+const playBtn     = document.getElementById('playBtn');
+const iconPlay    = document.getElementById('iconPlay');
+const iconPause   = document.getElementById('iconPause');
+const musicBars   = document.getElementById('musicBars');
 
 /* ═══════════════════════════════════════════
    OPEN ENVELOPE
@@ -18,63 +22,55 @@ function openEnvelope() {
   if (isOpened) return;
   isOpened = true;
 
-  document.body.classList.add('opened');
-  document.getElementById('card').setAttribute('aria-hidden', 'false');
+  body.classList.add('opened');
 
-  revealItems();
-  setTimeout(startMusic, 2200);
+  /* Start music after the letter fully appears (~1.4s) */
+  setTimeout(startMusic, 1500);
 }
 
 /* ═══════════════════════════════════════════
-   SEQUENTIAL REVEAL
-   Finds all .ri and .photo-card elements inside
-   the card and staggers them with .show class
+   MUSIC — primary: local MP3
+   fallback: YouTube iframe API
 ═══════════════════════════════════════════ */
-function revealItems() {
-  /* Reveal general .ri items */
-  const riItems = document.querySelectorAll('#card .ri');
-  /* Reveal photo cards separately (they overlap with .ri flow) */
-  const photoCards = document.querySelectorAll('#card .photo-card');
 
-  const BASE_DELAY = 900;  /* card transition ~0.85s */
-  const STAGGER    = 220;
-
-  riItems.forEach((el, i) => {
-    setTimeout(() => {
-      el.classList.add('show');
-    }, BASE_DELAY + i * STAGGER);
-  });
-
-  /* Photo cards stagger after the header reveals */
-  photoCards.forEach((el, i) => {
-    setTimeout(() => {
-      el.classList.add('show');
-    }, BASE_DELAY + 2 * STAGGER + i * STAGGER);
-  });
-}
-
-/* ═══════════════════════════════════════════
-   MUSIC
-═══════════════════════════════════════════ */
+/* ── Try local MP3 first ── */
 function startMusic() {
   if (!musicEl) { initYouTube(); return; }
 
-  musicEl.volume = 0.72;
+  musicEl.volume = 0.7;
 
-  const p = musicEl.play();
-  if (p !== undefined) {
-    p.then(() => setPlayingUI(true))
-     .catch(() => { setPlayingUI(false); initYouTube(); });
+  const playPromise = musicEl.play();
+
+  if (playPromise !== undefined) {
+    playPromise
+      .then(() => {
+        /* MP3 playing fine */
+        setPlayingUI(true);
+      })
+      .catch(() => {
+        /* Browser blocked autoplay — show player, let user tap */
+        setPlayingUI(false);
+        /* Also try YouTube as fallback */
+        initYouTube();
+      });
   }
 
+  /* Listen for native audio events */
   musicEl.addEventListener('play',  () => setPlayingUI(true));
   musicEl.addEventListener('pause', () => setPlayingUI(false));
   musicEl.addEventListener('ended', () => setPlayingUI(false));
-  musicEl.addEventListener('error', () => { initYouTube(); });
+
+  /* If file not found / error, fall back to YouTube */
+  musicEl.addEventListener('error', () => {
+    console.warn('Local audio failed — switching to YouTube fallback.');
+    initYouTube();
+  });
 }
 
+/* ── Toggle play/pause (called by button) ── */
 function toggleMusic() {
-  if (musicEl && !musicEl.error) {
+  /* Try local MP3 first */
+  if (musicEl && musicEl.src && !musicEl.error) {
     if (musicEl.paused) {
       musicEl.play().then(() => setPlayingUI(true)).catch(() => {});
     } else {
@@ -83,11 +79,18 @@ function toggleMusic() {
     }
     return;
   }
+
+  /* Fallback: YouTube player */
   if (ytPlayer && ytAPIReady) {
-    isPlaying ? ytPlayer.pauseVideo() : ytPlayer.playVideo();
+    if (isPlaying) {
+      ytPlayer.pauseVideo();
+    } else {
+      ytPlayer.playVideo();
+    }
   }
 }
 
+/* ── Update UI ── */
 function setPlayingUI(playing) {
   isPlaying = playing;
   iconPlay.style.display  = playing ? 'none'  : 'block';
@@ -99,27 +102,42 @@ function setPlayingUI(playing) {
 
 /* ═══════════════════════════════════════════
    YOUTUBE FALLBACK
+   Video: "Can I Have This Dance" — HSM 2 OST
 ═══════════════════════════════════════════ */
-const YT_VID   = 'xBpbM9SXQXE';
-let ytPlayer   = null;
-let ytAPIReady = false;
+const YT_VID    = 'xBpbM9SXQXE';
+let ytPlayer    = null;
+let ytAPIReady  = false;
 
 function initYouTube() {
+  /* Only load once */
   if (document.getElementById('yt-script')) return;
-  const tag = document.createElement('script');
-  tag.id  = 'yt-script';
-  tag.src = 'https://www.youtube.com/iframe_api';
+
+  const tag    = document.createElement('script');
+  tag.id       = 'yt-script';
+  tag.src      = 'https://www.youtube.com/iframe_api';
   document.head.appendChild(tag);
 }
 
 window.onYouTubeIframeAPIReady = function () {
   ytAPIReady = true;
+
   ytPlayer = new YT.Player('yt-player', {
-    width: '1', height: '1',
+    width:  '1',
+    height: '1',
     videoId: YT_VID,
-    playerVars: { autoplay:1, controls:0, rel:0, loop:1, playlist:YT_VID },
+    playerVars: {
+      autoplay:       1,
+      controls:       0,
+      rel:            0,
+      loop:           1,
+      playlist:       YT_VID,
+      modestbranding: 1,
+    },
     events: {
-      onReady(e)       { e.target.setVolume(70); e.target.playVideo(); },
+      onReady(e) {
+        e.target.setVolume(70);
+        e.target.playVideo();
+      },
       onStateChange(e) {
         if (e.data === YT.PlayerState.PLAYING) setPlayingUI(true);
         if (e.data === YT.PlayerState.PAUSED ||
